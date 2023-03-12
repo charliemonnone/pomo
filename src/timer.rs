@@ -1,10 +1,30 @@
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 pub const SECOND: Duration = Duration::from_secs(1);
+pub const MINUTE: u64 = 60;
 
 pub struct Timer {
     name: String,
     start_duration: Duration,
     remaining: Duration,
+}
+
+impl Display for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let seconds = self.remaining().as_secs() % MINUTE;
+        let minutes = self.remaining().as_secs() / MINUTE;
+        let seconds_zero_char = if ((seconds as f64) / 10.0) < 1.0 {
+            "0"
+        } else {
+            ""
+        };
+
+        let zero_char = if minutes == 0 { "0" } else { "" };
+        write!(
+            f,
+            "{} {zero_char}{minutes}:{seconds_zero_char}{seconds} ",
+            self.name()
+        )
+    }
 }
 
 impl Timer {
@@ -25,7 +45,7 @@ impl Timer {
         self.remaining = self.start_duration.clone();
     }
 
-    /// Get remaining duration of active timer. 
+    /// Get remaining duration of active timer.
     pub fn remaining(&self) -> &Duration {
         &self.remaining
     }
