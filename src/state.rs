@@ -6,7 +6,7 @@ pub enum State {
     Quitting,
     StoppedTimer,
     RunningTimer,
-    PausedTimer,
+    PausedTimer
 }
 
 impl Display for State {
@@ -15,7 +15,7 @@ impl Display for State {
             Self::Quitting => write!(f, "Quitting"),
             Self::StoppedTimer => write!(f, "Stopped"),
             Self::RunningTimer => write!(f, "Running"),
-            Self::PausedTimer => write!(f, "Paused"),
+            Self::PausedTimer => write!(f, "Paused")
         }
     }
 }
@@ -38,7 +38,7 @@ impl State {
                 Command::Resume => State::RunningTimer,
                 Command::Quit => State::Quitting,
                 _ => State::PausedTimer,
-            },
+            }
         }
     }
 }

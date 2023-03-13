@@ -1,3 +1,4 @@
+use std::fmt::Display;
 // #![allow(dead_code)]
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -10,24 +11,16 @@ mod term_utils;
 mod timer;
 
 use crate::command::Command;
-use crate::io_utils::write;
+use crate::io_utils::*;
 use crate::ring::RingBuffer;
 use crate::state::State;
 use crate::term_utils::*;
 use crate::timer::{Timer, MINUTE, SECOND};
 
-use std::io;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::TryRecvError;
-use std::thread;
-
 const POMODORO_LENGTH: u64 = 25; // seconds for testing, should be minutes
 const SHORT_BREAK: u64 = 5;
 
 // NOTE: need to include rounds as well
-// TODO: cycle through some unicode chars while timer is running
-// paused is some kind of dot char instead
 // TODO: dont wait until minute has passed to sleep, just wait to decrement timer until minute has passed
 // try to hit 60 fps
 // TODO: need a way to notify user of invalid input now that FromStr is gone for command
@@ -35,6 +28,36 @@ const SHORT_BREAK: u64 = 5;
 // TODO: status line printing state/timer name, remaining time, indicator animation, current round
 // TODO: now that line re-writing is switch to blocking input when no timer is running, and spawn
 // a new input thread when timer is running
+
+
+struct Status<'a> {
+    indicator: &'a str,
+    state: State,
+    timer: &'a mut Timer, // formatting state should also include the duration in the status line
+    rounds: u32
+}
+
+impl Display for Status<'_> {
+
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let indicator = self.indicator;
+        let rounds = self.rounds.to_string();
+        let state = self.state.to_string();
+        let timer_name = self.timer.name();
+        let duration = format_duration(self.timer.remaining());
+
+        // 10 is the number of static chars below between the │ chars
+        let char_budget = WIDTH - indicator.len() - rounds.len() - state.len() - timer_name.len() - duration.len() - 14;  
+        let back_chars = "\x1b[18E";
+        write!(
+            f, 
+            "{LINE_CLEAR}\r│ {} Round: {} | {} {} {} |{}│\x1b[{char_budget}D", 
+            indicator, rounds, state, timer_name, duration, " ".repeat(char_budget)
+            
+        )
+    }
+}
 
 fn main() {
     write(SCREEN_CLEAR);
@@ -48,7 +71,6 @@ fn main() {
     write(sub_header("Status"));
     write(line(" "));
 
-    let mut rounds = 0;
     let mut indicator = RingBuffer::new(["◤", "◥", "◢", "◣"]);
     let mut timers = RingBuffer::new([
         Timer::new("pomodoro", POMODORO_LENGTH),
@@ -58,45 +80,49 @@ fn main() {
     let input_channel = spawn_input_channel();
     let mut state = State::StoppedTimer;
 
-    let mut current_timer = timers.next_mut();
-    let mut status = String::new();
+    // let mut current_timer = timers.next_mut();
+    // let mut status = String::new();
+
+    let mut status = Status {
+        indicator: "◈",
+        state: State::StoppedTimer,
+        timer: timers.next_mut(),
+        rounds: 0
+    };
 
     loop {
         let start = Instant::now();
-        status.clear();
 
         let command = match get_input(&input_channel) {
             Some(input) => Command::from(input.as_str()),
             None => Command::from(""),
         };
 
-        state = state.next(command);
-        match state {
+        status.state = status.state.next(command);
+
+        match status.state {
             State::Quitting => {
                 break;
-            }
-            State::StoppedTimer => {
-                status.push_str(&current_timer.to_string());
-                write(format_status("◈", &state, &status));
-            }
+            },
+            State::StoppedTimer | State::PausedTimer => {
+                status.indicator = "◈";
+                // status.push_str(&current_timer.to_string());
+                // write(format_status("◈", &state, &status));
+            },
             State::RunningTimer => {
-                status.push_str(&format_duration(current_timer.remaining()));
-                write(format_status(indicator.next(), &state, &status));
-
-                if current_timer.remaining() == &Duration::ZERO {
+                if status.timer.remaining() == &Duration::ZERO {
                     print!("\x07");
-                    current_timer.reset();
-                    current_timer = timers.next_mut();
-                    state = State::StoppedTimer;
+                    status.indicator = "◈";
+                    status.timer.reset();
+                    // status.timer = 
+                    status.state = State::StoppedTimer;
                 } else {
-                    current_timer.advance();
+                    status.indicator = indicator.next();
+                    status.timer.advance();
                 }
-            }
-            State::PausedTimer => {
-                status.push_str(&format_duration(current_timer.remaining()));
-                write(format_status("◈", &state, &status))
-            }
+            },
         }
+        write(status.to_string());
         sleep(SECOND.saturating_sub(start.elapsed()));
     }
 
@@ -143,38 +169,6 @@ fn line(contents: &str) -> String {
     let space = char_budget + (contents.len() % 2);
 
     format!("\n│ {contents}{}│", " ".repeat(space),)
-}
-
-fn get_input(input_channel: &Receiver<String>) -> Option<String> {
-    match input_channel.try_recv() {
-        Ok(input) => {
-            write(BACK_ONE_LINE);
-            Some(input)
-        }
-        Err(TryRecvError::Empty) => None,
-        Err(TryRecvError::Disconnected) => panic!("input channel disconnected, shutting down."),
-    }
-}
-
-fn spawn_input_channel() -> Receiver<String> {
-    let (tx, rx) = mpsc::channel::<String>();
-
-    thread::spawn(move || loop {
-        let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer).unwrap();
-        buffer.retain(|c| c != '\n' && c != '\r');
-        tx.send(buffer).unwrap();
-    });
-
-    rx
-}
-
-fn format_status(indicator: &str, state: &State, status: impl Into<String>) -> String {
-    format!(
-        "{LINE_CLEAR}\r{VERTICAL_BAR} {indicator} {} {} ",
-        state,
-        status.into()
-    )
 }
 
 fn format_duration(duration: &Duration) -> String {
