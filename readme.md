@@ -5,14 +5,15 @@ A zero dependency(except for the Rust standard library) Pomodoro timer for termi
 ![Pomotime Test Run](pomo.gif)
 
 ## Installing
-From Cargo
+Using cargo
 `cargo install pomotime`
+or
+`cargo install --git https://github.com/charliemonnone/pomo`
 
 From Source
 ```
 git clone https://github.com/charliemonnone/pomo
 cd pomo
-cargo build --release
+cargo install --path .
 ```
-Then move the binary in `target/release/pomo` to a suitable location and add it to your path.
 
