@@ -15,7 +15,7 @@ use crate::timer::{format_duration, Timer, MINUTE, SECOND};
 
 const POMODORO_LENGTH: u64 = 25 * MINUTE;
 const SHORT_BREAK: u64 = 5 * MINUTE;
-
+// a
 fn main() {
     write(SCREEN_CLEAR);
     write(main_header("POMO"));
